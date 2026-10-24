@@ -162,6 +162,15 @@ function serveStatic(res, pathname) {
 const routes = {
   'GET /api/time': (req, res) => json(res, { t: Date.now() }),
 
+  // 各iMacで `curl -s http://<サーバ>:8080/kiosk.sh | bash` するだけで展示を開始できる
+  'GET /kiosk.sh': (req, res) => {
+    const host = String(req.headers.host ?? '');
+    if (!/^[\w.:-]+$/.test(host)) return json(res, { error: 'bad host' }, 400);
+    const script = fs.readFileSync(path.join(ROOT, 'scripts', 'kiosk-mac.sh'), 'utf8');
+    res.writeHead(200, { 'Content-Type': 'text/x-shellscript; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.end(script.replace(/^#!.*\n/, (l) => `${l}export UNIVFES_SERVER="${host}"\n`));
+  },
+
   'GET /api/hello': (req, res, url) => {
     const ip = clientIp(req);
     json(res, {
@@ -310,6 +319,7 @@ server.listen(config.port, () => {
     console.log(`  展示:     http://${ip}:${config.port}/`);
     console.log(`  管理画面: http://${ip}:${config.port}/admin`);
     console.log(`  シミュレータ: http://${ip}:${config.port}/sim`);
+    console.log(`  各iMacで: curl -s http://${ip}:${config.port}/kiosk.sh | bash`);
   }
   console.log(`演目: ${config.scenes.map((s) => `${s.id}(${s.duration}s)`).join(' → ')} → ループ`);
 });
