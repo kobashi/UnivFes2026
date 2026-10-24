@@ -1,6 +1,8 @@
 // 1台分の画面を動かす。演目の切替・フェード・タイトル・座席表示を担当。
 // 実機（app.js）でもシミュレータ（sim.js）でも同じものを使う。
 
+import { aisleExtent, screenToWorldX, worldToScreenU } from './layout.js';
+import { edgeHint } from './scenes/common.js';
 import { SCENES } from './scenes/index.js';
 import { sceneAt } from './schedule.js';
 import { clamp } from './util.js';
@@ -42,10 +44,12 @@ export class SeatRunner {
   frame(ctx, w, h, now, dt, state, overlay = {}) {
     const info = sceneAt(state.schedule, now);
     this._ensure(info);
-    this.env.audio.setFade(info.fade);
+    this.env.audio.setFade(overlay.calibrate ? 0 : info.fade);
     ctx.save();
-    this.scene.frame(ctx, w, h, info.local, dt, { now, info });
+    if (overlay.calibrate) drawCalibration(ctx, w, h, this.env, now);
+    else this.scene.frame(ctx, w, h, info.local, dt, { now, info });
     ctx.restore();
+    if (overlay.calibrate) return info;
 
     if (info.fade < 1) {
       ctx.fillStyle = `rgba(0,0,0,${1 - info.fade})`;
@@ -73,6 +77,57 @@ function drawTitle(ctx, w, h, Scene, t) {
   ctx.fillStyle = `rgba(255,255,255,${a * 0.8})`;
   ctx.fillText(Scene.subtitle, w / 2, h * 0.6);
   ctx.restore();
+}
+
+// 間隔調整用の画面。部屋の座標に固定した斜線と目盛り、一定速度で動く玉を描く。
+// 位置の設定が正しければ、隣の画面との間で斜線がまっすぐ続き、玉の速さも揃って見える。
+function drawCalibration(ctx, w, h, env, now) {
+  const { seat, seats, layout } = env;
+  const t = now / 1000;
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, w, h);
+  const X0 = screenToWorldX(seat, 0);
+  const X1 = screenToWorldX(seat, 1);
+  const lo = Math.min(X0, X1);
+  const hi = Math.max(X0, X1);
+  const sx = (X) => worldToScreenU(seat, X) * w;
+  ctx.lineWidth = Math.max(2, h * 0.006);
+  // 斜線（ワールド座標で 45° 相当。画面の高さ = 0.5625 ユニットとして描く）
+  const H = h / w;
+  ctx.strokeStyle = '#0cf';
+  for (let n = Math.floor((lo - H) / 0.25) - 1; n <= Math.ceil(hi / 0.25) + 1; n++) {
+    const Xa = n * 0.25;
+    ctx.beginPath();
+    ctx.moveTo(sx(Xa), 0);
+    ctx.lineTo(sx(Xa + H), h);
+    ctx.stroke();
+  }
+  // 目盛り（1ユニットごと = 画面1枚分）
+  const cm = layout.geometry?.screenWidthCm ?? 0;
+  ctx.fillStyle = '#ff0';
+  ctx.font = `${Math.round(h * 0.04)}px "Helvetica Neue", sans-serif`;
+  ctx.textAlign = 'center';
+  for (let n = Math.floor(lo * 2); n <= Math.ceil(hi * 2); n++) {
+    const X = n / 2;
+    const x = sx(X);
+    ctx.fillRect(x - 1, h * 0.46, 2, h * (n % 2 ? 0.04 : 0.08));
+    if (n % 2 === 0 && cm) ctx.fillText(`${Math.round(X * cm)}cm`, x, h * 0.6);
+  }
+  ctx.fillRect(0, h / 2 - 1, w, 2);
+  // 一定速度の玉（1ユニット/秒で通路を往復）
+  const ext = aisleExtent(seats, seat.aisle);
+  const p = (t % (ext.span * 2)) / ext.span;
+  const bx = ext.min + (p < 1 ? p : 2 - p) * ext.span;
+  ctx.fillStyle = '#f40';
+  ctx.beginPath();
+  ctx.arc(sx(bx), h * 0.3, h * 0.06, 0, Math.PI * 2);
+  ctx.fill();
+  edgeHint(ctx, w, h, seat, bx, 0.3, '255,80,0', { strength: 0.6 });
+  ctx.fillStyle = '#fff';
+  ctx.font = `bold ${Math.round(h * 0.08)}px "Helvetica Neue", sans-serif`;
+  ctx.fillText(seat.id, w / 2, h * 0.85);
+  ctx.font = `${Math.round(h * 0.04)}px "Helvetica Neue", sans-serif`;
+  ctx.fillText(cm ? `中心 ${Math.round(seat.x * cm)}cm` : `x = ${seat.x.toFixed(2)}`, w / 2, h * 0.93);
 }
 
 function drawIdentify(ctx, w, h, seat, lines) {

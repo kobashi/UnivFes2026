@@ -1,10 +1,13 @@
 // 40台を1画面で再現するシミュレータ。実機が無くても演出の確認ができる。
-// 各画面をクリックするとその席で「動き検出」が起きたことにして波紋を出す。
+// 各画面をクリックするとその席で「動き検出」が起きたことにする（演目に応じて
+// 波紋・影・流れ星が出る）。画面は端末の実際の間隔どおりに並べる。
 
 import { AudioEngine, NullAudio } from './audio.js';
 import { SyntheticCamera } from './camera.js';
 import { Clock } from './clock.js';
+import { allSeats, makeSeat } from './layout.js';
 import { connectEvents, fetchHello, postJSON } from './net.js';
+import { encodeMask, MASK_H, MASK_W } from './scenes/echo.js';
 import { SeatRunner } from './runtime.js';
 import { sceneAt } from './schedule.js';
 
@@ -17,7 +20,7 @@ const H = 108;
 
 async function main() {
   const hello = await fetchHello();
-  const { layout } = hello.config;
+  let { layout } = hello.config;
   let state = hello.state;
   const clock = new Clock();
   await clock.sync();
@@ -55,7 +58,7 @@ async function main() {
     label.textContent = seat.id;
     wrap.append(cv, label);
     rowEls[seat.row]?.append(wrap);
-    cv.addEventListener('click', () => postJSON('/api/event', { type: 'ripple', seat: seat.id, intensity: 1 }));
+    cv.addEventListener('click', () => postJSON('/api/event', clickEvent(seat.id, sceneAt(state.schedule, clock.now()).id)));
 
     const env = {
       seat,
@@ -66,13 +69,22 @@ async function main() {
       camera: new SyntheticCamera(48, 36, seat.index),
       emit: () => {},
     };
-    units.push({ seat, env, ctx: cv.getContext('2d'), runner: new SeatRunner(env) });
+    units.push({ seat, env, wrap, ctx: cv.getContext('2d'), runner: new SeatRunner(env) });
 
     const opt = document.createElement('option');
     opt.value = seat.id;
     opt.textContent = seat.id;
     listenSel.append(opt);
   }
+
+  // 実際の間隔どおりに配置する（1ユニット = 画面1枚 = W px）
+  const place = () => {
+    const minX = Math.min(...units.map((u) => u.env.seat.x)) - 0.5;
+    const maxX = Math.max(...units.map((u) => u.env.seat.x)) + 0.5;
+    for (const el of Object.values(rowEls)) el.style.width = `${(maxX - minX) * W}px`;
+    for (const u of units) u.wrap.style.left = `${(u.env.seat.x - 0.5 - minX) * W}px`;
+  };
+  place();
 
   // 1席だけ選んで音を聴く
   listenSel.addEventListener('change', () => {
@@ -91,6 +103,16 @@ async function main() {
       state = ev.state;
       audio.setVolume(state.volume);
       audio.setMuted(state.muted);
+    } else if (ev.type === 'layout') {
+      layout = ev.layout;
+      const seats = allSeats(layout);
+      for (const u of units) {
+        u.env.layout = layout;
+        u.env.seats = seats;
+        u.env.seat = makeSeat(u.seat.row, u.seat.col, layout);
+        u.runner.reset();
+      }
+      place();
     } else if (ev.type !== 'reload') {
       for (const u of units) u.runner.onEvent(ev, clock.now());
     }
@@ -107,7 +129,7 @@ async function main() {
     if (camTick) lastCam = ts;
     for (const u of units) {
       if (camTick) u.env.camera.update(now);
-      u.runner.frame(u.ctx, W, H, now, dt, state, { identify: state.identify });
+      u.runner.frame(u.ctx, W, H, now, dt, state, { identify: state.identify, calibrate: state.calibrate });
     }
     const info = sceneAt(state.schedule, now);
     statusEl.textContent = `${info.index + 1}/${state.schedule.scenes.length} ${info.id}  残り ${Math.ceil(info.remaining)}秒${state.schedule.hold != null ? '（固定中）' : ''}`;
@@ -119,3 +141,17 @@ main().catch((e) => {
   console.error(e);
   statusEl.textContent = `エラー: ${e.message}`;
 });
+
+// クリックした席で起こす出来事（演目ごと）
+function clickEvent(seat, sceneId) {
+  if (sceneId === 'nightsky') return { type: 'meteor', seat };
+  if (sceneId === 'echo') {
+    // 人影の代わりに円い影を送る
+    const bits = new Uint8Array(MASK_W * MASK_H);
+    for (let y = 0; y < MASK_H; y++) {
+      for (let x = 0; x < MASK_W; x++) bits[y * MASK_W + x] = (x - MASK_W / 2) ** 2 + ((y - MASK_H / 2) * 1.8) ** 2 < 60 ? 1 : 0;
+    }
+    return { type: 'echo', seat, mask: encodeMask(bits), energy: 0.2 };
+  }
+  return { type: 'ripple', seat, intensity: 1 };
+}

@@ -10,12 +10,16 @@
   "scenes": [
     { "id": "corridor", "duration": 120 },
     { "id": "mirror", "duration": 120 },
-    { "id": "migration", "duration": 120 }
+    { "id": "migration", "duration": 120 },
+    { "id": "sequencer", "duration": 120 },
+    { "id": "echo", "duration": 120 },
+    { "id": "nightsky", "duration": 120 }
   ],
   "transition": 3,
   "volume": 0.7,
   "renderScale": 1,
   "motionThreshold": 0.05,
   "idleRippleSec": 5,
+  "geometry": { "screenWidthCm": 52, "gapScale": 1, "positionsCm": {} },
   "adminToken": ""
 }

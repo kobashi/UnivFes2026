@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { allSeats, makeSeat, screenToWorldX, seatFromIp, worldToScreenU } from '../public/js/layout.js';
+import { aisleExtent, allSeats, makeSeat, maxGap, screenToWorldX, seatFromIp, worldToScreenU } from '../public/js/layout.js';
 
 test('IP末尾 1〜10 が列1、11〜20 が列2 …', () => {
   assert.equal(seatFromIp('192.168.0.1').id, '1-1');
@@ -50,4 +50,32 @@ test('画面座標と物理座標の往復', () => {
 test('rowReverse で列内の番号の向きを反転できる', () => {
   const layout = { rows: 4, perRow: 10, rowReverse: [false, true, false, false] };
   assert.equal(makeSeat(2, 1, layout).x, makeSeat(1, 10, layout).x);
+});
+
+const withGeo = (geometry) => ({ rows: 4, perRow: 10, rowReverse: [false, false, false, false], geometry });
+
+test('未測定なら隙間なしで並ぶ', () => {
+  const seats = allSeats(withGeo({ screenWidthCm: 50, gapScale: 1, positionsCm: {} }));
+  assert.equal(makeSeat(1, 3, withGeo({ screenWidthCm: 50, gapScale: 1, positionsCm: {} })).x, 2.5);
+  assert.equal(maxGap(seats, 1), 0);
+});
+
+test('実測位置（cm）を画面幅単位に変換し、gapScale で隙間を縮められる', () => {
+  // 1番の中心 25cm、以降 75cm 間隔、画面幅 50cm → 隙間 0.5 画面分
+  const positionsCm = { 2: Array.from({ length: 10 }, (_, i) => 25 + 75 * i) };
+  const full = withGeo({ screenWidthCm: 50, gapScale: 1, positionsCm });
+  assert.equal(makeSeat(2, 1, full).x, 0.5);
+  assert.equal(makeSeat(2, 3, full).x, 3.5);
+  assert.ok(Math.abs(maxGap(allSeats(full), 1) - 0.5) < 1e-9);
+  const half = withGeo({ screenWidthCm: 50, gapScale: 0.5, positionsCm });
+  assert.equal(makeSeat(2, 3, half).x, 3); // 2.5（隙間なし）と 3.5（実寸）の中間
+  const none = withGeo({ screenWidthCm: 50, gapScale: 0, positionsCm });
+  assert.equal(makeSeat(2, 3, none).x, 2.5);
+});
+
+test('通路の範囲は面している列の画面全体', () => {
+  const positionsCm = { 3: Array.from({ length: 10 }, (_, i) => 50 + 100 * i) };
+  const ext = aisleExtent(allSeats(withGeo({ screenWidthCm: 50, gapScale: 1, positionsCm })), 1);
+  assert.equal(ext.min, 0); // 列2（隙間なし）の左端
+  assert.equal(ext.max, 19.5); // 列3 の10番 (950cm = 19) の右端
 });

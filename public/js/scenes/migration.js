@@ -1,12 +1,17 @@
 // 演目3「深海の大回遊」
 // 1列10台をつなげた横長の海を、画面より大きなクジラや魚の群れが泳いで渡る。
+// 端末の間隔は実寸で扱う（隙間は「窓の外」として見えない）。隙間が広くても
+// 一続きに見えるよう、クジラは最大の隙間より大きくし、隙間にいる間は
+// 隣の画面の縁が淡く光る。
 // クジラの声と低音はクジラが居る画面から鳴るので、音も一緒に移動する。
 // カメラの前で動くと、その画面から泡が湧き上がる。
 
-import { worldToScreenU } from '../layout.js';
+import { aisleExtent, maxGap, worldToScreenU } from '../layout.js';
 import { clamp, hsl, mod, mulberry32, pentaFreq } from '../util.js';
+import { edgeHint } from './common.js';
 
-const CYCLE = 40; // 秒。クジラ→魚群の1サイクル
+const WHALE_SPEED = 0.53; // ユニット/秒（通路が長くても見かけの速さは同じ）
+const REST = 10; // クジラが去ってから次が来るまでの秒数
 
 export default class Migration {
   static id = 'migration';
@@ -16,7 +21,13 @@ export default class Migration {
   constructor(env) {
     this.env = env;
     this.seat = env.seat;
-    this.L = env.layout.perRow;
+    this.ext = aisleExtent(env.seats, env.seat.aisle);
+    const gap = maxGap(env.seats, env.seat.aisle);
+    this.whaleLen = clamp(Math.max(2.4, gap + 1.6), 2.4, 4.5);
+    this.spread = 1 + gap * 0.6; // 魚群を隙間の分だけ広げ、どこかの画面には必ず魚がいるようにする
+    const travel = this.ext.span + this.whaleLen * 2 + 1;
+    this.crossSec = travel / WHALE_SPEED;
+    this.cycle = this.crossSec + REST;
     this.dir = env.seat.aisle === 1 ? -1 : 1;
     // 同じ通路の全PCが同じ魚を描けるよう、シードは通路ごとに共通
     const rnd = mulberry32(1234 + env.seat.aisle * 77);
@@ -28,8 +39,9 @@ export default class Migration {
       s: 0.035 + rnd() * 0.03,
       hue: rnd() < 0.5 ? 25 + rnd() * 25 : 175 + rnd() * 35,
     }));
-    this.jelly = Array.from({ length: 4 }, (_, i) => ({
-      X: 1.2 + i * 2.6 + rnd() * 0.8,
+    const nj = Math.max(4, Math.round(this.ext.span / 2.5));
+    this.jelly = Array.from({ length: nj }, (_, i) => ({
+      X: this.ext.min + ((i + 0.3 + rnd() * 0.4) / nj) * this.ext.span,
       ph: rnd() * 6.28,
       hue: 290 + rnd() * 50,
       s: 0.1 + rnd() * 0.05,
@@ -44,21 +56,24 @@ export default class Migration {
   }
 
   whale(t) {
-    const ct = mod(t, CYCLE);
-    const p = ct / 30;
+    const ct = mod(t, this.cycle);
+    const p = ct / this.crossSec;
     if (p > 1) return null;
-    const span = this.L + 6;
-    const X = this.dir > 0 ? -3 + p * span : this.L + 3 - p * span;
-    return { X, Y: 0.5 + 0.1 * Math.sin(t * 0.4), len: 2.4, vx: this.dir, ct };
+    const { min, max, span } = this.ext;
+    const m = this.whaleLen + 0.5;
+    const X = this.dir > 0 ? min - m + p * (span + 2 * m) : max + m - p * (span + 2 * m);
+    return { X, Y: 0.5 + 0.1 * Math.sin(t * 0.4), len: this.whaleLen, vx: this.dir, ct };
   }
 
+  // 魚群はクジラの半分ほど進んだところで逆向きに、速く通り過ぎる
   school(t) {
-    const ct = mod(t - 16, CYCLE);
-    const dur = 11;
+    const ct = mod(t - this.crossSec * 0.45, this.cycle);
+    const { min, max, span } = this.ext;
+    const m = 2 * this.spread;
+    const dur = (span + 2 * m) / 1.3;
     if (ct > dur) return null;
     const p = ct / dur;
-    const span = this.L + 4;
-    const X = this.dir > 0 ? this.L + 2 - p * span : -2 + p * span;
+    const X = this.dir > 0 ? max + m - p * (span + 2 * m) : min - m + p * (span + 2 * m);
     return { X, Y: 0.35 + 0.15 * Math.sin(t * 0.7), vx: -this.dir };
   }
 
@@ -80,8 +95,9 @@ export default class Migration {
     ray.addColorStop(0, 'rgba(150,220,255,0.14)');
     ray.addColorStop(1, 'rgba(150,220,255,0)');
     ctx.fillStyle = ray;
-    for (let k = 0; k < this.L + 2; k++) {
-      const X = k * 1.7 + Math.sin(t * 0.1 + k) * 0.4 - 0.5;
+    const nRays = Math.ceil(this.ext.span / 1.7) + 2;
+    for (let k = 0; k < nRays; k++) {
+      const X = this.ext.min + k * 1.7 + Math.sin(t * 0.1 + k) * 0.4 - 0.5;
       if (Math.abs(X - seat.x) > 1.5) continue;
       ctx.beginPath();
       ctx.moveTo(sx(X - 0.12), 0);
@@ -102,16 +118,21 @@ export default class Migration {
     if (wh && Math.abs(wh.X - seat.x) < wh.len / 2 + 0.8) {
       drawWhale(ctx, sx(wh.X), wh.Y * h, wh.len * w, wh.vx * seat.screenSign, t);
     }
+    // 隙間にいる間も気配を残す（頭と尾の両端で判定）
+    if (wh) {
+      for (const e of [wh.X + (wh.len / 2) * wh.vx, wh.X - (wh.len / 2) * wh.vx]) edgeHint(ctx, w, h, seat, e, wh.Y, '120,190,230', { strength: 0.35 });
+    }
 
     const sc = this.school(t);
     if (sc) {
       const face = sc.vx * seat.screenSign;
       for (const f of this.fish) {
-        const X = sc.X + f.dx + 0.05 * Math.sin(t * 2 + f.ph);
+        const X = sc.X + f.dx * this.spread + 0.05 * Math.sin(t * 2 + f.ph);
         if (Math.abs(X - seat.x) > 0.7) continue;
         const Y = sc.Y + f.dy + 0.03 * Math.sin(t * 3 * f.sp + f.ph);
         drawFish(ctx, sx(X), Y * h, f.s * w, face, t * 12 * f.sp + f.ph, f.hue);
       }
+      edgeHint(ctx, w, h, seat, sc.X, sc.Y, '255,190,120', { strength: 0.25, range: 1 + this.spread });
     }
 
     // 泡

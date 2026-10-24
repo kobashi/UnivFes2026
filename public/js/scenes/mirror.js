@@ -89,7 +89,7 @@ export default class Mirror {
       const intensity = clamp(cam.motion * 6, 0.3, 1);
       this.env.emit('ripple', { intensity });
       this.burst(cam.cx * w, (0.5 + (cam.cy - 0.5) / crop) * h, hue0, w);
-      this.env.audio.bell(pentaFreq(880, Math.floor(seat.x)), { gain: 0.2 });
+      this.env.audio.bell(pentaFreq(880, seat.rank), { gain: 0.2 });
     }
 
     // --- 届いた波紋を描く ---
@@ -155,7 +155,7 @@ export default class Mirror {
   ping(rp) {
     // 自分が出した波紋は発生時にもう鳴らしている
     if (rp.self && performance.now() - this.lastEmitWall < 2000) return;
-    const f = pentaFreq(rp.o.row % 2 ? 440 : 330, Math.floor(rp.o.x));
+    const f = pentaFreq(rp.o.row % 2 ? 440 : 330, rp.o.rank);
     this.env.audio.tone({ freq: f, dur: 1.2, gain: (0.2 * rp.intensity) / (1 + rp.d * 0.6), attack: 0.01 });
   }
 }

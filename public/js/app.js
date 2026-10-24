@@ -3,7 +3,7 @@
 import { AudioEngine } from './audio.js';
 import { Camera, SyntheticCamera } from './camera.js';
 import { Clock } from './clock.js';
-import { makeSeat } from './layout.js';
+import { allSeats, makeSeat } from './layout.js';
 import { connectEvents, fetchHello, postJSON } from './net.js';
 import { SeatRunner } from './runtime.js';
 
@@ -62,6 +62,12 @@ async function main() {
       state = ev.state;
       audio.setVolume(state.volume);
       audio.setMuted(state.muted || forceMute);
+    } else if (ev.type === 'layout') {
+      // 管理画面で端末の間隔が変更された
+      env.layout = ev.layout;
+      env.seat = makeSeat(seat.row, seat.col, ev.layout);
+      env.seats = allSeats(ev.layout);
+      runner.reset();
     } else if (ev.type === 'reload') {
       location.reload();
     } else {
@@ -104,6 +110,7 @@ async function main() {
     }
     runner.frame(ctx, W, H, now, dt, state, {
       identify: state.identify || !assigned,
+      calibrate: state.calibrate,
       lines: assigned
         ? [`IP ${hello.ip}`, `camera: ${camStatus} / audio: ${audio.stateLabel} / ${Math.round(fps)}fps`]
         : [`このPC (${hello.ip}) は座席に割り当てられていません`, 'config.json の seatOverrides か URL の ?seat=列-番号 で指定してください'],

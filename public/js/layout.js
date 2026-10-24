@@ -16,6 +16,13 @@
 
 export const DEFAULT_LAYOUT = { rows: 4, perRow: 10, rowReverse: [false, false, false, false] };
 
+// 端末の実際の間隔。
+//   screenWidthCm : 画面（表示部分）の横幅。1ユニット = この幅
+//   positionsCm   : { 列: [1番の中心, 2番の中心, ...] }。全列共通の基準端から測った画面中心の位置
+//   gapScale      : 1 = 実寸どおり（隙間も再現）、0 = 隙間なしで並んでいるものとして扱う
+// 未測定の席は隙間なしで並んでいるものとして扱う。
+export const DEFAULT_GEOMETRY = { screenWidthCm: 52, gapScale: 1, positionsCm: {} };
+
 // facing: 画面が向いている y 方向（+1 = y が増える方向）。壁(y=0)から測る。
 // aisle: その画面を見る来場者がいる通路（0=通路A, 1=中央通路, 2=通路C）
 const ROW_GEOM = {
@@ -38,13 +45,19 @@ export function makeSeat(row, col, layout = DEFAULT_LAYOUT) {
   if (row < 1 || row > rows || col < 1 || col > perRow) return null;
   const g = ROW_GEOM[row] ?? { y: row * 1.5, facing: row % 2 ? -1 : 1, aisle: Math.min(row - 1, 2) };
   const reverse = !!layout.rowReverse?.[row - 1];
+  const rank = reverse ? perRow - col : col - 1; // 列の中で基準端から何台目か
+  const adjacent = rank + 0.5;
+  const geo = layout.geometry;
+  const pos = geo?.positionsCm?.[row]?.[col - 1];
+  const physical = Number.isFinite(pos) && geo.screenWidthCm > 0 ? pos / geo.screenWidthCm : adjacent;
   return {
     id: seatId(row, col),
     row,
     col,
     index: (row - 1) * perRow + (col - 1),
-    // 画面中心の物理位置（1台 = 幅1ユニット）
-    x: (reverse ? perRow - col : col - 1) + 0.5,
+    rank,
+    // 画面中心の物理位置（画面幅 = 1ユニット）
+    x: adjacent + (geo?.gapScale ?? 1) * (physical - adjacent),
     y: g.y,
     facing: g.facing,
     aisle: g.aisle,
@@ -75,3 +88,23 @@ export const screenToWorldX = (seat, u) => seat.x + (u - 0.5) * seat.screenSign;
 export const worldToScreenU = (seat, X) => (X - seat.x) * seat.screenSign + 0.5;
 
 export const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+
+// 通路に面した画面全体が覆う x の範囲と、画面どうしの最大の隙間（ユニット）
+export function aisleExtent(seats, aisle) {
+  const xs = seats.filter((s) => s.aisle === aisle).map((s) => s.x);
+  if (!xs.length) return { min: 0, max: 1, span: 1 };
+  const min = Math.min(...xs) - 0.5;
+  const max = Math.max(...xs) + 0.5;
+  return { min, max, span: max - min };
+}
+
+export function maxGap(seats, aisle) {
+  let gap = 0;
+  const byRow = new Map();
+  for (const s of seats) if (s.aisle === aisle) byRow.set(s.row, [...(byRow.get(s.row) ?? []), s.x]);
+  for (const xs of byRow.values()) {
+    xs.sort((a, b) => a - b);
+    for (let i = 1; i < xs.length; i++) gap = Math.max(gap, xs[i] - xs[i - 1] - 1);
+  }
+  return gap;
+}

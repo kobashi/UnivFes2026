@@ -3,7 +3,7 @@
 // 同時に光るので、通路そのものが光のトンネルになる。光が自分の画面を通過した瞬間に音が鳴るため、
 // 音も部屋の中を走っていく。20秒ごとに全台が同時にフラッシュし和音を鳴らす。
 
-import { screenToWorldX } from '../layout.js';
+import { aisleExtent, maxGap, screenToWorldX } from '../layout.js';
 import { mod, pentaFreq, hsl } from '../util.js';
 
 const SECTION = 30; // 秒ごとに光の動き方を切り替える
@@ -17,7 +17,9 @@ export default class Corridor {
   constructor(env) {
     this.env = env;
     this.seat = env.seat;
-    this.L = env.layout.perRow;
+    this.ext = aisleExtent(env.seats, env.seat.aisle);
+    // 隙間が広いほど光の幅を広げ、光が隙間に埋もれないようにする
+    this.widen = 1 + maxGap(env.seats, env.seat.aisle) * 0.8;
     this.armed = false; // 途中参加した直後に鳴らないよう、一度暗くなってから有効化
     this.lastFlash = null;
     this.flashAt = -99;
@@ -26,26 +28,29 @@ export default class Corridor {
 
   // 物理位置 X・時刻 t における光の強さ 0..1（全PCで同じ関数を評価する）
   intensity(X, t) {
-    const L = this.L;
+    const { min, max, span: len } = this.ext;
     const c = this.seat.aisle;
-    const g = (d, w) => Math.exp(-(d * d) / (2 * w * w));
+    const k = this.widen;
+    const g = (d, w) => Math.exp(-(d * d) / (2 * w * k * w * k));
     const tri = (p) => 1 - Math.abs(mod(p, 2) - 1);
-    const span = (p) => -0.8 + tri(p) * (L + 1.6);
+    // 速度を一定に保つため、通路が長いほど往復の周期を延ばす
+    const per = len / 10;
+    const span = (p) => min - 0.8 + tri(p) * (len + 1.6);
     switch (Math.floor(t / SECTION) % 4) {
       case 0: // 1つのパルスが往復
-        return g(X - span(t / 4.5 + c * 0.5), 0.6);
+        return g(X - span(t / (4.5 * per) + c * 0.5), 0.6);
       case 1: {
         // 両端から来て中央ですれ違う
-        const p = span(t / 4 + c * 0.5);
-        return Math.max(g(X - p, 0.5), g(X - (L - p), 0.5));
+        const p = span(t / (4 * per) + c * 0.5);
+        return Math.max(g(X - p, 0.5), g(X - (min + max - p), 0.5));
       }
       case 2: {
         // 虹の帯がゆっくり流れる（中央通路と壁側通路で逆向き）
         const dir = c === 1 ? -1 : 1;
-        return (0.5 + 0.5 * Math.cos(2 * Math.PI * (X / 3.3 - dir * t * 0.4))) ** 4;
+        return (0.5 + 0.5 * Math.cos(2 * Math.PI * (X / (3.3 * k) - dir * t * 0.4))) ** 4;
       }
       default: // 速いチェイス
-        return g(X - span(t / 2 + c * 0.5), 0.4);
+        return g(X - span(t / (2 * per) + c * 0.5), 0.4);
     }
   }
 
@@ -109,7 +114,7 @@ export default class Corridor {
     // 光が自分の前を通過したら音を鳴らす（ヒステリシス付き）
     if (this.armed && bc > 0.75) {
       this.armed = false;
-      const f = pentaFreq(seat.row % 2 ? 220 : 440, Math.floor(seat.x));
+      const f = pentaFreq(seat.row % 2 ? 220 : 440, seat.rank);
       if (Math.floor(t / SECTION) % 4 === 2) audio.tone({ freq: f, dur: 1.8, gain: 0.12, attack: 0.3 });
       else audio.bell(f, { gain: 0.18 });
     } else if (!this.armed && bc < 0.35) {

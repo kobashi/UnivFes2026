@@ -10,7 +10,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DEFAULT_LAYOUT, allSeats, makeSeat, parseSeatId, seatFromIp } from '../public/js/layout.js';
+import { DEFAULT_GEOMETRY, DEFAULT_LAYOUT, allSeats, makeSeat, parseSeatId, seatFromIp } from '../public/js/layout.js';
 import { sceneAt, sceneOffset } from '../public/js/schedule.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -26,6 +26,9 @@ const DEFAULTS = {
     { id: 'corridor', duration: 120 },
     { id: 'mirror', duration: 120 },
     { id: 'migration', duration: 120 },
+    { id: 'sequencer', duration: 120 },
+    { id: 'echo', duration: 120 },
+    { id: 'nightsky', duration: 120 },
   ],
   transition: 3,
   volume: 0.7,
@@ -33,36 +36,65 @@ const DEFAULTS = {
   motionThreshold: 0.05,
   idleRippleSec: 5,
   adminToken: '',
+  geometry: DEFAULT_GEOMETRY,
 };
+
+// 管理画面で調整した端末の間隔はここに保存し、config.json より優先する
+const GEOMETRY_FILE = process.env.UNIVFES_GEOMETRY || path.join(ROOT, 'geometry.json');
 
 function loadConfig() {
   const file = process.env.UNIVFES_CONFIG || path.join(ROOT, 'config.json');
   let user = {};
   if (fs.existsSync(file)) user = JSON.parse(fs.readFileSync(file, 'utf8'));
   const cfg = { ...DEFAULTS, ...user, layout: { ...DEFAULTS.layout, ...user.layout } };
+  let saved = {};
+  if (fs.existsSync(GEOMETRY_FILE)) saved = JSON.parse(fs.readFileSync(GEOMETRY_FILE, 'utf8'));
+  cfg.layout.geometry = sanitizeGeometry({ ...DEFAULTS.geometry, ...user.geometry, ...saved }, cfg.layout);
   if (process.env.PORT) cfg.port = +process.env.PORT;
   return cfg;
 }
 
+function sanitizeGeometry(g, layout) {
+  const fin = (v, lo, hi, d) => (Number.isFinite(+v) && +v >= lo && +v <= hi ? +v : d);
+  const positionsCm = {};
+  for (let r = 1; r <= layout.rows; r++) {
+    const row = g.positionsCm?.[r];
+    if (!Array.isArray(row)) continue;
+    positionsCm[r] = Array.from({ length: layout.perRow }, (_, i) => (row[i] === null || row[i] === '' ? null : fin(row[i], -10000, 10000, null)));
+  }
+  return {
+    screenWidthCm: fin(g.screenWidthCm, 10, 200, DEFAULT_GEOMETRY.screenWidthCm),
+    gapScale: fin(g.gapScale, 0, 1, 1),
+    positionsCm,
+  };
+}
+
 const config = loadConfig();
-const SEATS = allSeats(config.layout);
+let SEATS = allSeats(config.layout);
 
 const state = {
   epoch: Date.now(),
   hold: null,
   muted: false,
   identify: false,
+  calibrate: false,
   volume: config.volume,
 };
 
 const schedule = () => ({ epoch: state.epoch, hold: state.hold, scenes: config.scenes, transition: config.transition });
-const publicState = () => ({ schedule: schedule(), muted: state.muted, identify: state.identify, volume: state.volume });
+const publicState = () => ({
+  schedule: schedule(),
+  muted: state.muted,
+  identify: state.identify,
+  calibrate: state.calibrate,
+  volume: state.volume,
+});
 
 // ---------- 端末・SSE ----------
 
 const streams = new Set();
 const status = new Map(); // seatId or "?ip" → 最新の状態
-const lastRippleBySeat = new Map();
+const lastEventBySeat = new Map(); // "type:seat" → ms
 let lastRipple = 0;
 
 function broadcast(msg) {
@@ -88,9 +120,21 @@ function resolveSeat(ip, seatParam) {
 function emitRipple(seatIdStr, intensity, auto = false) {
   const now = Date.now();
   lastRipple = now;
-  lastRippleBySeat.set(seatIdStr, now);
   broadcast({ type: 'ripple', seat: seatIdStr, intensity, auto, t: now, hue: Math.floor(Math.random() * 360) });
 }
+
+// 端末から届く出来事。種類ごとに1台あたりの最短間隔を決めておく
+const EVENT_TYPES = {
+  ripple: { every: 800, data: (b) => ({ intensity: Math.min(1, Math.max(0, num(b.intensity) ?? 0.7)) }) },
+  echo: {
+    every: 200,
+    data: (b) => {
+      if (typeof b.mask !== 'string' || !/^[A-Za-z0-9+/=]{1,200}$/.test(b.mask)) return null;
+      return { mask: b.mask, energy: Math.min(1, Math.max(0, num(b.energy) ?? 0)) };
+    },
+  },
+  meteor: { every: 1500, data: () => ({ dir: Math.random() < 0.5 ? 1 : -1 }) },
+};
 
 // 「ミラー」上演中に誰も動かなければ、ランダムな席から波紋を出して場を保つ
 setInterval(() => {
@@ -197,13 +241,20 @@ const routes = {
 
   'POST /api/event': async (req, res) => {
     const b = await readBody(req);
-    if (b.type !== 'ripple') return json(res, { error: 'unknown type' }, 400);
+    const spec = EVENT_TYPES[b.type];
+    if (!spec) return json(res, { error: 'unknown type' }, 400);
     const p = parseSeatId(b.seat);
     const seat = p && makeSeat(p.row, p.col, config.layout);
     if (!seat) return json(res, { error: 'bad seat' }, 400);
+    const data = spec.data(b);
+    if (!data) return json(res, { error: 'bad data' }, 400);
     // 1台からの連打を抑える
-    if (Date.now() - (lastRippleBySeat.get(seat.id) ?? 0) < 800) return json(res, { ok: false, throttled: true });
-    emitRipple(seat.id, Math.min(1, Math.max(0, num(b.intensity) ?? 0.7)));
+    const key = `${b.type}:${seat.id}`;
+    const now = Date.now();
+    if (now - (lastEventBySeat.get(key) ?? 0) < spec.every) return json(res, { ok: false, throttled: true });
+    lastEventBySeat.set(key, now);
+    if (b.type === 'ripple') emitRipple(seat.id, data.intensity);
+    else broadcast({ type: b.type, seat: seat.id, t: now, ...data });
     json(res, { ok: true });
   },
 
@@ -231,6 +282,7 @@ const routes = {
     json(res, {
       now,
       state: publicState(),
+      layout: config.layout,
       seats: SEATS.map((s) => {
         const st = status.get(s.id) ?? null;
         return { ...s, status: st, online: online(st) };
@@ -285,6 +337,18 @@ const routes = {
       case 'identify':
         state.identify = !!b.on;
         break;
+      case 'calibrate':
+        state.calibrate = !!b.on;
+        break;
+      case 'geometry': {
+        // 端末の間隔を変更して保存し、全台に即時反映する
+        config.layout.geometry = sanitizeGeometry(b.geometry ?? {}, config.layout);
+        SEATS = allSeats(config.layout);
+        fs.writeFileSync(GEOMETRY_FILE, `${JSON.stringify(config.layout.geometry, null, 2)}\n`);
+        broadcast({ type: 'layout', layout: config.layout });
+        console.log('[admin] geometry saved');
+        return json(res, { ok: true, layout: config.layout });
+      }
       case 'reload':
         broadcast({ type: 'reload' });
         return json(res, { ok: true });
