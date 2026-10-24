@@ -48,7 +48,7 @@ PC実習室の iMac 40台を連動させ、Webカメラとサウンドを使っ�
 
 ### 1. サーバ（教卓のiMac `192.168.112.70`）
 
-Node.js 18 以上が入っている必要があります（導入済み）。
+Node.js 18 以上が必要です。教卓iMacでは `/Volumes/THAWSPACE/node/bin` に導入済みで、`start-server.command` はここの Node を自動で使います（ターミナルの PATH 設定は不要）。
 
 1. このリポジトリを教卓iMacに置きます。GitHub で Code › Download ZIP を選んで展開するか、次を実行します。
    ```bash

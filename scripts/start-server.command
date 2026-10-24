@@ -2,6 +2,10 @@
 # 教卓のiMacでダブルクリック：展示サーバを起動する（このウィンドウを閉じると停止）
 cd "$(dirname "$0")/.." || exit 1
 
+# 教卓iMacでは ThawSpace に置いた Node を優先して使う（再起動で消えない領域）
+NODE_DIR="${NODE_DIR:-/Volumes/THAWSPACE/node/bin}"
+[ -x "$NODE_DIR/node" ] && PATH="$NODE_DIR:$PATH"
+
 if ! command -v node >/dev/null 2>&1; then
   for p in /usr/local/bin /opt/homebrew/bin "$HOME"/node-*/bin; do [ -x "$p/node" ] && PATH="$p:$PATH"; done
 fi
