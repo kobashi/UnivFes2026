@@ -17,9 +17,9 @@ export default class Migration {
     this.env = env;
     this.seat = env.seat;
     this.L = env.layout.perRow;
-    this.dir = env.seat.corridor === 0 ? 1 : -1;
+    this.dir = env.seat.aisle === 1 ? -1 : 1;
     // 同じ通路の全PCが同じ魚を描けるよう、シードは通路ごとに共通
-    const rnd = mulberry32(1234 + env.seat.corridor * 77);
+    const rnd = mulberry32(1234 + env.seat.aisle * 77);
     this.fish = Array.from({ length: 36 }, () => ({
       dx: (rnd() - 0.5) * 2.4,
       dy: (rnd() - 0.5) * 0.5,
@@ -68,7 +68,7 @@ export default class Migration {
     const sx = (X) => worldToScreenU(seat, X) * w;
 
     const bg = ctx.createLinearGradient(0, 0, 0, h);
-    bg.addColorStop(0, seat.corridor ? '#0b3550' : '#0a3a5c');
+    bg.addColorStop(0, seat.aisle === 1 ? '#0a3a5c' : '#0b3550');
     bg.addColorStop(0.6, '#041a33');
     bg.addColorStop(1, '#010814');
     ctx.fillStyle = bg;

@@ -19,15 +19,26 @@ test('octetStart で開始アドレスをずらせる', () => {
 
 test('40席', () => assert.equal(allSeats().length, 40));
 
-test('向かい合う列は画面の左右が物理的に逆', () => {
-  const a = makeSeat(1, 5);
-  const b = makeSeat(2, 5);
+test('列2と列3は中央通路を挟んで向かい合い、画面の左右が物理的に逆', () => {
+  const a = makeSeat(2, 5);
+  const b = makeSeat(3, 5);
   assert.equal(a.x, b.x);
+  assert.equal(a.facing, 1); // 列2 → 列3 側
+  assert.equal(b.facing, -1); // 列3 → 列2 側
+  assert.ok(a.y < b.y);
   // 両画面の右端は物理的に反対側
   assert.ok(screenToWorldX(a, 1) < a.x);
   assert.ok(screenToWorldX(b, 1) > b.x);
-  // 列2と列3は背中合わせ＝画面は逆向き
-  assert.equal(makeSeat(2, 1).facing, -makeSeat(3, 1).facing);
+  assert.equal(a.aisle, 1);
+  assert.equal(b.aisle, 1);
+});
+
+test('列1・列4は壁側を向き、それぞれ背中合わせの列と逆向き', () => {
+  assert.equal(makeSeat(1, 1).facing, -1); // 壁(y=0)側
+  assert.equal(makeSeat(4, 1).facing, 1);
+  assert.equal(makeSeat(1, 1).facing, -makeSeat(2, 1).facing);
+  assert.equal(makeSeat(3, 1).facing, -makeSeat(4, 1).facing);
+  assert.deepEqual([1, 2, 3, 4].map((r) => makeSeat(r, 1).aisle), [0, 1, 1, 2]);
 });
 
 test('画面座標と物理座標の往復', () => {

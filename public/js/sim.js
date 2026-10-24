@@ -28,12 +28,14 @@ async function main() {
 
   // 俯瞰図どおりに並べる（列1が上の壁側）
   const rowEls = {};
-  const order = [['wall', '壁'], [1], ['aisle', '通路A'], [2], [3], ['aisle', '通路B'], [4], ['wall', '壁']];
+  const order = [['wall', '壁'], ['aisle', '通路A'], [1], [2], ['aisle', '中央通路'], [3], [4], ['aisle', '通路C'], ['wall', '壁']];
   for (const [r, label] of order) {
     const el = document.createElement('div');
     if (typeof r === 'number') {
       el.className = 'row';
-      el.dataset.label = `列${r} ${r % 2 ? '画面↓' : '画面↑'}`;
+      // 図は y が下向きに増えるので facing>0 なら画面は下向き
+      const f = hello.seats.find((s) => s.row === r)?.facing;
+      el.dataset.label = `列${r} ${f > 0 ? '画面↓' : '画面↑'}`;
       rowEls[r] = el;
     } else {
       el.className = r;

@@ -1,6 +1,6 @@
 // 演目1「光の回廊」
-// 光のパルスが通路に沿って画面から画面へ走る。向かい合う2列が同時に光るので
-// 通路そのものが光のトンネルになる。光が自分の画面を通過した瞬間に音が鳴るため、
+// 光のパルスが通路に沿って画面から画面へ走る。中央通路では向かい合う列2・3が
+// 同時に光るので、通路そのものが光のトンネルになる。光が自分の画面を通過した瞬間に音が鳴るため、
 // 音も部屋の中を走っていく。20秒ごとに全台が同時にフラッシュし和音を鳴らす。
 
 import { screenToWorldX } from '../layout.js';
@@ -27,7 +27,7 @@ export default class Corridor {
   // 物理位置 X・時刻 t における光の強さ 0..1（全PCで同じ関数を評価する）
   intensity(X, t) {
     const L = this.L;
-    const c = this.seat.corridor;
+    const c = this.seat.aisle;
     const g = (d, w) => Math.exp(-(d * d) / (2 * w * w));
     const tri = (p) => 1 - Math.abs(mod(p, 2) - 1);
     const span = (p) => -0.8 + tri(p) * (L + 1.6);
@@ -40,8 +40,8 @@ export default class Corridor {
         return Math.max(g(X - p, 0.5), g(X - (L - p), 0.5));
       }
       case 2: {
-        // 虹の帯がゆっくり流れる（通路Aと通路Bで逆向き）
-        const dir = c ? -1 : 1;
+        // 虹の帯がゆっくり流れる（中央通路と壁側通路で逆向き）
+        const dir = c === 1 ? -1 : 1;
         return (0.5 + 0.5 * Math.cos(2 * Math.PI * (X / 3.3 - dir * t * 0.4))) ** 4;
       }
       default: // 速いチェイス
@@ -52,7 +52,7 @@ export default class Corridor {
   frame(ctx, w, h, t, dt) {
     const seat = this.seat;
     const audio = this.env.audio;
-    const baseHue = t * 8 + seat.corridor * 150;
+    const baseHue = t * 8 + seat.aisle * 120;
 
     // 画面を横にサンプリングしてグラデーション1枚で描く（軽い）
     const N = 12;

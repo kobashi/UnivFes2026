@@ -112,7 +112,7 @@
     };
     const row = (r) => `<div class="row"><b>列${r}</b>${rows[r].sort((a, b) => a.x - b.x).map(cell).join('')}</div>`;
     document.getElementById('map').innerHTML =
-      `${row(1)}<div class="aisle">通路A</div>${row(2)}${row(3)}<div class="aisle">通路B</div>${row(4)}`;
+      `<div class="aisle">通路A（壁側）</div>${row(1)}${row(2)}<div class="aisle">中央通路</div>${row(3)}${row(4)}<div class="aisle">通路C（壁側）</div>`;
     document.getElementById('count').textContent = `${seats.filter((s) => s.online).length} / ${seats.length} 台オンライン（黄 = 音声/カメラ/fps に注意）`;
     document.getElementById('unassigned').textContent = unassigned.length
       ? `座席未割当の端末: ${unassigned.map((u) => u.ip).join(', ')}` : '';
