@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PC Room Simulator</title>
+<style>
+  body { margin: 0; background: #111; color: #ccc; font: 13px "Hiragino Sans", sans-serif; }
+  header { display: flex; gap: 16px; align-items: center; padding: 8px 16px; background: #1c1c1c; position: sticky; top: 0; z-index: 1; flex-wrap: wrap; }
+  header a { color: #8cf; }
+  #status { font-variant-numeric: tabular-nums; }
+  #room { padding: 12px 16px; display: flex; flex-direction: column; gap: 4px; overflow-x: auto; }
+  .row { display: flex; gap: 4px; position: relative; padding-left: 92px; }
+  .row::before { content: attr(data-label); position: absolute; left: 0; top: 40%; color: #999; }
+  .wall { height: 6px; background: repeating-linear-gradient(45deg, #444 0 6px, #2a2a2a 6px 12px); color: transparent; margin-left: 92px; }
+  .aisle { color: #666; text-align: center; padding: 10px 0 10px 92px; letter-spacing: .3em; }
+  .unit { position: relative; }
+  .unit canvas { display: block; width: 192px; height: 108px; background: #000; cursor: pointer; }
+  .unit span { position: absolute; left: 3px; top: 1px; font-size: 10px; color: #fff8; pointer-events: none; }
+</style>
+</head>
+<body>
+<header>
+  <strong>PC実習室シミュレータ</strong>
+  <span id="status">接続中…</span>
+  <label>音を聴く座席 <select id="listen"><option value="">なし</option></select></label>
+  <span>画面クリック = その席で動きを検出（波紋）</span>
+  <a href="/admin">管理画面</a>
+</header>
+<div id="room"></div>
+<script type="module" src="/js/sim.js"></script>
+</body>
+</html>

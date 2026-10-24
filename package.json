@@ -1,0 +1,12 @@
+{
+  "name": "univfes2026-pc-room",
+  "version": "1.0.0",
+  "description": "PC実習室 40台連動アトラクション",
+  "type": "module",
+  "private": true,
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node server/server.js",
+    "test": "node --test test/*.test.js"
+  }
+}
