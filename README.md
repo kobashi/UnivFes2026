@@ -48,21 +48,55 @@ PC実習室の iMac 40台を連動させ、Webカメラとサウンドを使っ�
 
 ### 1. サーバ（教卓のiMac `192.168.112.70`）
 
-Node.js 18 以上が必要です。教卓iMacでは `/Volumes/THAWSPACE/node/bin` に導入済みで、`start-server.command` はここの Node を自動で使います（ターミナルの PATH 設定は不要）。
+教卓iMacは再起動で元に戻る設定のため、Node.js とこのリポジトリは消えない領域 `/Volumes/THAWSPACE` に置いています。
 
-1. このリポジトリを教卓iMacに置きます。GitHub で Code › Download ZIP を選んで展開するか、次を実行します。
+| もの | 場所 |
+|---|---|
+| Node.js（18 以上） | `/Volumes/THAWSPACE/node/bin` |
+| このリポジトリ | `/Volumes/THAWSPACE/UnivFes2026`（フォルダ名が違う場合は読み替え） |
+
+1. Finder で `/Volumes/THAWSPACE/UnivFes2026/scripts/start-server.command` をダブルクリックします。ターミナルから起動する場合は次を実行します。
    ```bash
-   git clone -b claude/pc-classroom-linked-attraction-g31a9w https://github.com/kobashi/UnivFes2026.git
+   cd /Volumes/THAWSPACE/UnivFes2026
+   ./scripts/start-server.command
    ```
-2. Finder で `scripts/start-server.command` をダブルクリックします。
-   - 初回に「開発元を確認できません」と出た場合は、右クリック ›「開く」を選びます。
+   - `start-server.command` は `/Volumes/THAWSPACE/node/bin` の Node を自動で使うので、PATH を設定しなくても起動できます。
    - 「受信ネットワーク接続を許可しますか？」には「許可」を選びます。
-3. ターミナルに次のように表示されれば起動しています。
+2. ターミナルに次のように表示されれば起動しています。
    ```
      展示:     http://192.168.112.70:8080/
      管理画面: http://192.168.112.70:8080/admin
      各iMacで: curl -s http://192.168.112.70:8080/kiosk.sh | bash
    ```
+
+「権限がありません」や「開発元を確認できません」で起動しない場合（ZIP で取得したときに起こります）は、一度だけ次を実行します。
+
+```bash
+cd /Volumes/THAWSPACE/UnivFes2026
+chmod +x scripts/*.command scripts/*.sh
+xattr -dr com.apple.quarantine .
+```
+
+#### ターミナルで `node` を使えるようにする（任意）
+
+サーバの起動には不要ですが、ターミナルで `node` や `npm` を直接使いたい場合は PATH を通します。
+
+```bash
+echo 'export PATH="/Volumes/THAWSPACE/node/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc
+node -v
+```
+
+ホームフォルダが凍結されている場合、この設定は再起動で消えます。残したい場合は、凍結を解除した状態で設定してから凍結し直します。
+
+#### リポジトリの更新
+
+```bash
+cd /Volumes/THAWSPACE/UnivFes2026
+git pull
+```
+
+ZIP で取得した場合は、新しい ZIP を同じ場所に展開し直します（`config.json` を変更していたら控えておきます）。
 
 ウィンドウを開いている間はサーバが動き、教卓iMacもスリープしません。サーバが落ちた場合は3秒後に自動で再起動します。止めるにはウィンドウを閉じます。
 
