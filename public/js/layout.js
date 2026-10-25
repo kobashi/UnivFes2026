@@ -89,15 +89,21 @@ export const worldToScreenU = (seat, X) => (X - seat.x) * seat.screenSign + 0.5;
 
 export const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 
-// 通路に面した画面全体が覆う x の範囲と、画面どうしの最大の隙間（ユニット）
-export function aisleExtent(seats, aisle) {
-  const xs = seats.filter((s) => s.aisle === aisle).map((s) => s.x);
+// 画面の集まりが覆う x の範囲（ユニット）
+function extentOf(xs) {
   if (!xs.length) return { min: 0, max: 1, span: 1 };
   const min = Math.min(...xs) - 0.5;
   const max = Math.max(...xs) + 0.5;
   return { min, max, span: max - min };
 }
 
+// 通路に面した画面全体の範囲
+export const aisleExtent = (seats, aisle) => extentOf(seats.filter((s) => s.aisle === aisle).map((s) => s.x));
+
+// 1つの列の画面全体の範囲
+export const rowExtent = (seats, row) => extentOf(seats.filter((s) => s.row === row).map((s) => s.x));
+
+// 画面どうしの最大の隙間（ユニット）
 export function maxGap(seats, aisle) {
   let gap = 0;
   const byRow = new Map();

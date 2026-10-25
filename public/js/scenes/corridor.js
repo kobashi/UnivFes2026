@@ -1,9 +1,10 @@
 // 演目1「光の回廊」
 // 光のパルスが通路に沿って画面から画面へ走る。中央通路では向かい合う列2・3が
-// 同時に光るので、通路そのものが光のトンネルになる。光が自分の画面を通過した瞬間に音が鳴るため、
+// 同時に光るので、通路そのものが光のトンネルになる。中央通路では、光が列2を走り、
+// 端で向かいの列3に渡って戻ってくる「周回」の区間もあり、来場者のまわりを光が回る。光が自分の画面を通過した瞬間に音が鳴るため、
 // 音も部屋の中を走っていく。20秒ごとに全台が同時にフラッシュし和音を鳴らす。
 
-import { aisleExtent, maxGap, screenToWorldX } from '../layout.js';
+import { aisleExtent, maxGap, rowExtent, screenToWorldX } from '../layout.js';
 import { mod, pentaFreq, hsl } from '../util.js';
 
 const SECTION = 30; // 秒ごとに光の動き方を切り替える
@@ -18,6 +19,8 @@ export default class Corridor {
     this.env = env;
     this.seat = env.seat;
     this.ext = aisleExtent(env.seats, env.seat.aisle);
+    this.ext2 = rowExtent(env.seats, 2);
+    this.ext3 = rowExtent(env.seats, 3);
     // 隙間が広いほど光の幅を広げ、光が隙間に埋もれないようにする
     this.widen = 1 + maxGap(env.seats, env.seat.aisle) * 0.8;
     this.armed = false; // 途中参加した直後に鳴らないよう、一度暗くなってから有効化
@@ -40,7 +43,9 @@ export default class Corridor {
       case 0: // 1つのパルスが往復
         return g(X - span(t / (4.5 * per) + c * 0.5), 0.6);
       case 1: {
-        // 両端から来て中央ですれ違う
+        // 中央通路：2つの光が列2→列3→列2…と通路を周回する（来場者のまわりを回る）
+        if (c === 1) return Math.max(this.circuit(X, t, 0, g), this.circuit(X, t, 0.5, g));
+        // 壁側の通路：両端から来て中央ですれ違う
         const p = span(t / (4 * per) + c * 0.5);
         return Math.max(g(X - p, 0.5), g(X - (min + max - p), 0.5));
       }
@@ -52,6 +57,20 @@ export default class Corridor {
       default: // 速いチェイス
         return g(X - span(t / (2 * per) + c * 0.5), 0.4);
     }
+  }
+
+  // 周回する光の強さ。phase は周回のずらし（0..1）
+  circuit(X, t, phase, g) {
+    const CROSS = 1.2; // 向かいの列へ渡る区間の長さ（ユニット相当）
+    const a = this.ext2;
+    const b = this.ext3;
+    const total = a.span + b.span + 2 * CROSS;
+    const q = mod(t * 2.5 + phase * total, total);
+    const row = this.seat.row;
+    if (q < a.span) return row === 2 ? g(X - (a.min + q), 0.5) : 0;
+    if (q < a.span + CROSS) return 0.6 * g(X - (row === 2 ? a.max : b.max), 0.5); // 両列の端が光って橋渡し
+    if (q < a.span + CROSS + b.span) return row === 3 ? g(X - (b.max - (q - a.span - CROSS)), 0.5) : 0;
+    return 0.6 * g(X - (row === 2 ? a.min : b.min), 0.5);
   }
 
   frame(ctx, w, h, t, dt) {
