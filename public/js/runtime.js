@@ -123,6 +123,12 @@ function drawCalibration(ctx, w, h, env, now) {
   ctx.arc(sx(bx), h * 0.3, h * 0.06, 0, Math.PI * 2);
   ctx.fill();
   edgeHint(ctx, w, h, seat, bx, 0.3, '255,80,0', { strength: 0.6 });
+  // 番号の大きい隣の台がある側を矢印で示す（実物と逆なら col1Side を切り替える）
+  const reverse = !!layout.rowReverse?.[seat.row - 1];
+  const toHigher = (reverse ? -1 : 1) * seat.screenSign; // 画面上で +1 = 右
+  ctx.fillStyle = '#0f8';
+  ctx.font = `bold ${Math.round(h * 0.09)}px "Hiragino Sans", sans-serif`;
+  ctx.fillText(toHigher > 0 ? `${layout.perRow}番側 →` : `← ${layout.perRow}番側`, w / 2, h * 0.16);
   ctx.fillStyle = '#fff';
   ctx.font = `bold ${Math.round(h * 0.08)}px "Helvetica Neue", sans-serif`;
   ctx.fillText(seat.id, w / 2, h * 0.85);

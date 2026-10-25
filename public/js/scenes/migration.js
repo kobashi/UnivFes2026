@@ -248,9 +248,10 @@ export default class Migration {
       const X = c.X + Math.cos(a) * R * f.rr;
       if (Math.abs(X - seat.x) > 0.6) continue;
       const Y = cy + Math.sin(a) * 0.22 * f.rr;
-      // 進行方向（円の接線）に向ける
-      const dxs = -Math.sin(a) * R * f.rr * seat.screenSign * w;
-      const dys = Math.cos(a) * 0.22 * f.rr * h;
+      // 実際の進行方向（渦の接線方向 + 群れ全体の移動）に向ける
+      const w1 = f.sp * 1.4;
+      const dxs = (-Math.sin(a) * R * f.rr * w1 + c.dir * 0.35) * seat.screenSign * w;
+      const dys = Math.cos(a) * 0.22 * f.rr * w1 * h;
       drawSardine(ctx, sx(X), Y * h, f.s * w, Math.atan2(dys, dxs), 0.5 + 0.5 * Math.sin(a * 2 + t));
     }
     edgeHint(ctx, w, h, seat, c.X, cy, '190,210,230', { strength: 0.25, range: 1 + R });

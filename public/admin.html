@@ -63,7 +63,9 @@
     <div class="bar">
       <label>画面の横幅 <input id="gw" type="number" min="10" max="200" step="0.1"> cm</label>
       <label>隙間の再現 <input id="gs" type="range" min="0" max="1" step="0.05"> <span id="gsv"></span></label>
+      <label>通路Aから列1を見たとき 1番は <select id="gside"><option value="left">左端</option><option value="right">右端</option></select></label>
     </div>
+    <p class="note">「間隔チェック表示」では各画面に「10番側 →」の矢印が出ます。矢印が実際に番号の大きい隣の台を指していなければ、「1番は」の左右を切り替えて保存してください（全列まとめて切り替わります）。</p>
     <div class="bar" style="margin-top:6px">
       等間隔で埋める：
       <select id="fr"><option value="all">全列</option><option>1</option><option>2</option><option>3</option><option>4</option></select>
@@ -163,6 +165,7 @@
     const g = layout.geometry;
     $('gw').value = g.screenWidthCm;
     $('gs').value = g.gapScale;
+    $('gside').value = g.col1Side ?? 'left';
     let html = '<tr><td></td>' + Array.from({ length: layout.perRow }, (_, i) => `<td>${i + 1}番</td>`).join('') + '</tr>';
     for (let r = 1; r <= layout.rows; r++) {
       html += `<tr><td>列${r}</td>`;
@@ -183,7 +186,7 @@
       const r = el.dataset.r;
       (positionsCm[r] ??= Array(geoLayout.perRow).fill(null))[el.dataset.c - 1] = el.value === '' ? null : +el.value;
     });
-    return { screenWidthCm: +$('gw').value, gapScale: +$('gs').value, positionsCm };
+    return { screenWidthCm: +$('gw').value, gapScale: +$('gs').value, positionsCm, col1Side: $('gside').value };
   }
 
   function drawPreview() {

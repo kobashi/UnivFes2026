@@ -1,6 +1,8 @@
 // 40台を1画面で再現するシミュレータ。実機が無くても演出の確認ができる。
 // 各画面をクリックするとその席で「動き検出」が起きたことにする（演目に応じて
 // 波紋・影・流れ星が出る）。画面は端末の実際の間隔どおりに並べる。
+// 各列は「その列の画面を通路から見たときの並び」で表示する（俯瞰図のまま並べると、
+// 見る向きが逆の列は画面の中身が鏡写しになってつながって見えないため）。
 
 import { AudioEngine, NullAudio } from './audio.js';
 import { SyntheticCamera } from './camera.js';
@@ -77,12 +79,21 @@ async function main() {
     listenSel.append(opt);
   }
 
-  // 実際の間隔どおりに配置する（1ユニット = 画面1枚 = W px）
+  // 実際の間隔どおりに、通路から見た並びで配置する（1ユニット = 画面1枚 = W px）
   const place = () => {
     const minX = Math.min(...units.map((u) => u.env.seat.x)) - 0.5;
     const maxX = Math.max(...units.map((u) => u.env.seat.x)) + 0.5;
     for (const el of Object.values(rowEls)) el.style.width = `${(maxX - minX) * W}px`;
-    for (const u of units) u.wrap.style.left = `${(u.env.seat.x - 0.5 - minX) * W}px`;
+    for (const u of units) {
+      const { x, screenSign } = u.env.seat;
+      u.wrap.style.left = `${(screenSign > 0 ? x - 0.5 - minX : maxX - x - 0.5) * W}px`;
+    }
+    for (const [r, el] of Object.entries(rowEls)) {
+      const s1 = units.find((u) => u.seat.row === +r && u.seat.col === 1);
+      const s2 = units.find((u) => u.seat.row === +r && u.seat.col === 2);
+      const left = s1 && s2 && parseFloat(s1.wrap.style.left) < parseFloat(s2.wrap.style.left);
+      el.dataset.label = `列${r}（1番が${left ? '左' : '右'}）`;
+    }
   };
   place();
 

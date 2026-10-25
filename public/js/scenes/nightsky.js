@@ -6,6 +6,8 @@
 //   列4 西の空 : 夕焼けの名残が消えていき、街の灯りの上に夏の大三角
 // 北と南が向かい合う中央通路では、流れ星が列2から頭上を越えて列3へ（または逆へ）渡る。
 // 星や稜線は部屋の座標に固定してあり、端末の間隔が広くても窓越しのように続いて見える。
+// 星座の形と配置は「その列を見る人から見た左右」で決めている（部屋の座標のままだと、
+// 見る向きが逆の列で星座が鏡写しになるため）。
 // カメラの前で動くと、その画面から流れ星が飛び立つ。
 
 import { maxGap, rowExtent, screenToWorldX, worldToScreenU } from '../layout.js';
@@ -30,10 +32,12 @@ const SKIES = {
   4: { name: '西の空', pad: 246.9 },
 };
 
-// 星座：{ name, pts: [[x, y, 明るさ], ...], lines: [[i, j], ...] }（x, y はユニット、y は下向き）
+// 星座：{ name, pts: [[x, y, 明るさ], ...], lines: [[i, j], ...] }
+// x, y はユニットで、見る人から見て x は右向き、y は下向き
 const DIPPER = {
   name: '北斗七星',
-  pts: [[0, 0, 1], [-1, 0, 1], [-1.1, 0.8, 0.8], [-0.1, 0.7, 0.6], [0.1, 1.3, 0.9], [0.4, 1.8, 0.9], [0.9, 2.1, 0.9]].map(([x, y, m]) => [x * 0.22, y * 0.22, m]),
+  // ドゥーベ・メラク（指極星）を北極星側に向け、柄は左下へ伸びる
+  pts: [[0, 0, 1], [0, 0.9, 1], [-1.1, 1.1, 0.8], [-1.0, 0.25, 0.6], [-1.9, 0.0, 0.9], [-2.6, 0.15, 0.9], [-3.3, 0.6, 0.9]].map(([x, y, m]) => [x * 0.22, y * 0.22, m]),
   lines: [[0, 1], [1, 2], [2, 3], [3, 0], [3, 4], [4, 5], [5, 6]],
 };
 const CASSIOPEIA = {
@@ -83,16 +87,21 @@ export default class NightSky {
 
   // 列ごとの星座の位置（ワールド座標）
   layout() {
-    const { min, span } = this.ext;
-    const at = (f) => min + f * span;
+    const { min, max, span } = this.ext;
+    // 見る人から見て左端 = 0、右端 = 1 の位置をワールド座標に変換する
+    this.vs = this.seat.screenSign;
+    const at = (f) => (this.vs > 0 ? min + f * span : max - f * span);
+    this.at = at;
     this.cons = [];
-    if (this.row === 1) this.cons.push({ c: PLEIADES, X: at(0.68), Y: 0.15 });
+    // 東の空：すばるが昇ってくる
+    if (this.row === 1) this.cons.push({ c: PLEIADES, X: at(0.68), Y: 0.3 });
     if (this.row === 2) {
-      this.pole = { X: at(0.5), Y: 0.03 };
-      this.cons.push({ c: DIPPER, X: this.pole.X - 1.3, Y: this.pole.Y, rotate: true });
-      this.cons.push({ c: CASSIOPEIA, X: this.pole.X + 1.0, Y: this.pole.Y + 0.02, rotate: true });
+      // 北の空：北極星の左下（北西）に北斗七星、右上（北東）にカシオペヤ座
+      this.pole = { X: at(0.5), Y: 0.3 };
+      this.cons.push({ c: DIPPER, X: this.vx(this.pole.X, -1.1), Y: 0.32, rotate: true });
+      this.cons.push({ c: CASSIOPEIA, X: this.vx(this.pole.X, 0.8), Y: 0.02, rotate: true });
       // 回る星（北極星のまわりの円盤に散らす）
-      const R = Math.max(this.pole.X - min, min + span - this.pole.X) + 1;
+      const R = span / 2 + 1;
       const n = Math.min(4000, Math.round(R * R * 30));
       this.disk = Array.from({ length: n }, (_, i) => {
         const r = Math.sqrt(hash01(i * 3 + 11)) * R;
@@ -100,21 +109,37 @@ export default class NightSky {
       });
     }
     if (this.row === 3) {
-      this.cons.push({ c: PEGASUS, X: at(0.3), Y: 0.06 });
-      this.fomalhaut = { X: at(0.78), Y: 0.62 };
+      // 南の空：左上（南東の高い空）にペガススの大四辺形、真南の低い空にフォーマルハウト
+      this.cons.push({ c: PEGASUS, X: at(0.22), Y: 0.08 });
+      this.fomalhaut = { X: at(0.5), Y: 0.66 };
     }
     if (this.row === 4) {
-      this.triangle = { vega: { X: at(0.25), Y: 0.2 }, deneb: { X: at(0.55), Y: 0.1 }, altair: { X: at(0.42), Y: 0.55 } };
+      // 西の空：高い空にデネブ、左下（南西）にアルタイル、右（北西）にベガ。
+      // 縦横の比率を実際の空に近づけるため、横幅も画面の高さ程度に収める
+      const d = at(0.55);
+      this.triangle = { deneb: { X: d, Y: 0.08 }, altair: { X: this.vx(d, -0.45), Y: 0.62 }, vega: { X: this.vx(d, 0.32), Y: 0.46 } };
     }
   }
 
-  // 天の川の帯の中心（y、画面高さ比）。帯のない列は null
+  // 見る人から見て右へ dxView ユニット動かした位置
+  vx(X, dxView) {
+    return X + this.vs * dxView;
+  }
+
+  // 見る人から見た左右の位置（0..1）
+  viewF(X) {
+    const f = (X - this.ext.min) / this.ext.span;
+    return this.vs > 0 ? f : 1 - f;
+  }
+
+  // 天の川の帯の中心（y、画面高さ比）。帯のない列・範囲外は null
   milkyY(X) {
-    const { min, span } = this.ext;
-    const f = (X - min) / span;
-    if (this.row === 3) return 0.05 + 0.6 * f;
-    if (this.row === 4) return 0.02 + 1.2 * clamp(f - 0.4, -0.5, 1);
-    return null;
+    const f = this.viewF(X);
+    let y = null;
+    if (this.row === 3) y = (f - 0.45) / 0.4; // 右下（南西の地平線）から天頂へ
+    // デネブを通り、アルタイルとベガの間を抜けて地平線へ
+    if (this.row === 4) y = (-this.vs * (X - this.triangle.deneb.X) + 0.02) / 0.2;
+    return y !== null && y > -0.2 && y < 1.1 ? y : null;
   }
 
   ground(X) {
@@ -212,11 +237,13 @@ export default class NightSky {
 
     ctx.globalCompositeOperation = 'lighter';
     // 天の川（列3・4）。加算合成なので短冊どうしを重ねない
-    if (this.milkyY(seat.x) !== null) {
+    if (this.row === 3 || this.row === 4) {
       const SL = 12;
       for (let i = 0; i < SL; i++) {
         const X = X0 + ((i + 0.5) / SL) * (X1 - X0);
-        const yc = this.milkyY(X) * h;
+        const my = this.milkyY(X);
+        if (my === null) continue;
+        const yc = my * h;
         const gr = ctx.createLinearGradient(0, yc - h * 0.2, 0, yc + h * 0.2);
         gr.addColorStop(0, 'rgba(140,150,255,0)');
         gr.addColorStop(0.5, `rgba(170,170,255,${0.14 * starA})`);
@@ -233,11 +260,10 @@ export default class NightSky {
     ctx.fillStyle = '#fff';
     if (this.row === 2) {
       // 北極星のまわりを回る星。短い光跡を付ける
-      const ang = t * ROTATE;
-      ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+      const ang = -t * ROTATE; // 北を向いて見ると反時計回り（y 下向きの座標では角度が減る向き）
       for (const s of this.disk) {
         const a = s.a + ang;
-        const X = this.pole.X + s.r * Math.cos(a);
+        const X = this.vx(this.pole.X, s.r * Math.cos(a));
         if (X < xa - 0.05 || X > xb + 0.05) continue;
         const y = (this.pole.Y * ASPECT + s.r * Math.sin(a)) / ASPECT;
         if (y < 0 || y > this.ground(X)) continue;
@@ -277,7 +303,8 @@ export default class NightSky {
     let moon = null;
     if (this.row === 1) {
       const p = clamp(t / dur, 0, 1);
-      moon = { X: this.ext.min + this.ext.span * (0.28 + 0.12 * p), Y: 0.82 - 0.55 * Math.sqrt(p) };
+      // 月は東の地平線から右上（南東）へ昇っていく
+      moon = { X: this.at(0.28 + 0.12 * p), Y: 0.82 - 0.55 * Math.sqrt(p) };
       const mr = h * 0.09;
       if (Math.abs(moon.X - seat.x) < 1) {
         const mx = sx(moon.X);
@@ -382,17 +409,17 @@ export default class NightSky {
   drawConstellations(ctx, w, h, t, sx, xa, xb, lineA, starA) {
     const pts = []; // [X, y, 明るさ, ラベル]
     const segs = [];
-    const ang = t * ROTATE;
+    const ang = -t * ROTATE;
     for (const { c, X, Y, rotate } of this.cons) {
       const base = pts.length;
       for (const [dx, dy, m] of c.pts) {
-        let px = X + dx;
+        let px = this.vx(X, dx);
         let pyU = Y * ASPECT + dy;
         if (rotate) {
-          // 北極星を中心に回す
-          const rx = px - this.pole.X;
+          // 北極星を中心に、見る人から見た座標で回す
+          const rx = this.vs * (px - this.pole.X);
           const ry = pyU - this.pole.Y * ASPECT;
-          px = this.pole.X + rx * Math.cos(ang) - ry * Math.sin(ang);
+          px = this.vx(this.pole.X, rx * Math.cos(ang) - ry * Math.sin(ang));
           pyU = this.pole.Y * ASPECT + rx * Math.sin(ang) + ry * Math.cos(ang);
         }
         pts.push([px, pyU / ASPECT, m]);
@@ -506,7 +533,7 @@ export default class NightSky {
     }
     if (this.row === 3) {
       // 天文台のドーム
-      const dX = this.ext.min + this.ext.span * 0.62;
+      const dX = this.at(0.72);
       if (dX > xa - 0.3 && dX < xb + 0.3) {
         const y = this.ground(dX) * h;
         const r = h * 0.07;

@@ -79,3 +79,13 @@ test('通路の範囲は面している列の画面全体', () => {
   assert.equal(ext.min, 0); // 列2（隙間なし）の左端
   assert.equal(ext.max, 19.5); // 列3 の10番 (950cm = 19) の右端
 });
+
+test('col1Side で全列の画面の左右がそろって反転する', () => {
+  const left = withGeo({ screenWidthCm: 50, gapScale: 1, positionsCm: {}, col1Side: 'left' });
+  const right = withGeo({ screenWidthCm: 50, gapScale: 1, positionsCm: {}, col1Side: 'right' });
+  for (let r = 1; r <= 4; r++) assert.equal(makeSeat(r, 1, left).screenSign, -makeSeat(r, 1, right).screenSign);
+  // 通路Aから列1を見て 'left' なら 1番は左（画面の右が10番側 = x の正方向）
+  assert.equal(makeSeat(1, 1, left).screenSign, 1);
+  // 向かい合う列2・3は常に逆向き
+  assert.equal(makeSeat(2, 1, right).screenSign, -makeSeat(3, 1, right).screenSign);
+});

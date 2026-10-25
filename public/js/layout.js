@@ -20,8 +20,10 @@ export const DEFAULT_LAYOUT = { rows: 4, perRow: 10, rowReverse: [false, false, 
 //   screenWidthCm : 画面（表示部分）の横幅。1ユニット = この幅
 //   positionsCm   : { 列: [1番の中心, 2番の中心, ...] }。全列共通の基準端から測った画面中心の位置
 //   gapScale      : 1 = 実寸どおり（隙間も再現）、0 = 隙間なしで並んでいるものとして扱う
+//   col1Side      : 通路A（壁側）から列1を見たとき、1番が 'left'（左端）か 'right'（右端）か。
+//                   全列とも1番は同じ側にあるので、これで全列の画面の左右が決まる
 // 未測定の席は隙間なしで並んでいるものとして扱う。
-export const DEFAULT_GEOMETRY = { screenWidthCm: 52, gapScale: 1, positionsCm: {} };
+export const DEFAULT_GEOMETRY = { screenWidthCm: 52, gapScale: 1, positionsCm: {}, col1Side: 'left' };
 
 // facing: 画面が向いている y 方向（+1 = y が増える方向）。壁(y=0)から測る。
 // aisle: その画面を見る来場者がいる通路（0=通路A, 1=中央通路, 2=通路C）
@@ -61,9 +63,9 @@ export function makeSeat(row, col, layout = DEFAULT_LAYOUT) {
     y: g.y,
     facing: g.facing,
     aisle: g.aisle,
-    // 画面の「右」が物理 x の正負どちらを向くか。
-    // 画面の前に立つ人は -facing 方向を見るので、右手は facing>0 なら -x 側。
-    screenSign: g.facing > 0 ? -1 : 1,
+    // 画面の「右」が物理 x の正負どちらを向くか。向かい合う列どうしは逆になる。
+    // col1Side='left' では、列1（facing<0）を見る人の右手が x の正方向（10番側）。
+    screenSign: (g.facing > 0 ? -1 : 1) * (geo?.col1Side === 'right' ? -1 : 1),
   };
 }
 

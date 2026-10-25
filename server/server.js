@@ -66,6 +66,7 @@ function sanitizeGeometry(g, layout) {
     screenWidthCm: fin(g.screenWidthCm, 10, 200, DEFAULT_GEOMETRY.screenWidthCm),
     gapScale: fin(g.gapScale, 0, 1, 1),
     positionsCm,
+    col1Side: g.col1Side === 'right' ? 'right' : 'left',
   };
 }
 
