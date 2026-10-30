@@ -1,12 +1,19 @@
 {
   "name": "univfes2026-pc-room",
   "version": "1.0.0",
-  "description": "PC実習室 40台連動アトラクション",
+  "description": "PC実習室の iMac 40台を連動させる展示（Webカメラ・サウンド・6演目のループ上演）",
   "type": "module",
   "private": true,
-  "engines": { "node": ">=18" },
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "start": "node server/server.js",
     "test": "node --test test/*.test.js"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kobashi/UnivFes2026.git"
   }
 }
